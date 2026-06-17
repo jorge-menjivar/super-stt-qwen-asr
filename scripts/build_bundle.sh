@@ -39,8 +39,11 @@ trap 'rm -rf "$STAGE"' EXIT
 
 # 1. Relocatable CPython, installed INTO the bundle. uv resolves a valid patch
 #    release of the series, so there is no hardcoded download URL to go stale.
-export UV_PYTHON_INSTALL_DIR="$STAGE/runtime/pythons"
-uv python install --no-bin "$PY_SERIES"
+#    Pass --install-dir explicitly rather than exporting UV_PYTHON_INSTALL_DIR:
+#    in CI, astral-sh/setup-uv exports its own UV_PYTHON_INSTALL_DIR into the job
+#    env, which shadows ours and sends the interpreter elsewhere. A CLI flag wins
+#    over the env var, so the interpreter lands in the bundle either way.
+uv python install --install-dir "$STAGE/runtime/pythons" --no-bin "$PY_SERIES"
 # Exactly one interpreter was installed; give it a stable, version-independent
 # path so the launcher can hardcode runtime/python.
 mv "$STAGE"/runtime/pythons/cpython-*/ "$STAGE/runtime/python"
