@@ -37,17 +37,16 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
-# 1. Relocatable CPython, installed INTO the bundle. uv resolves a valid patch
-#    release of the series, so there is no hardcoded download URL to go stale.
-#    Pass --install-dir explicitly rather than exporting UV_PYTHON_INSTALL_DIR:
-#    in CI, astral-sh/setup-uv exports its own UV_PYTHON_INSTALL_DIR into the job
-#    env, which shadows ours and sends the interpreter elsewhere. A CLI flag wins
-#    over the env var, so the interpreter lands in the bundle either way.
-uv python install --install-dir "$STAGE/runtime/pythons" --no-bin "$PY_SERIES"
-# Exactly one interpreter was installed; give it a stable, version-independent
-# path so the launcher can hardcode runtime/python.
-mv "$STAGE"/runtime/pythons/cpython-*/ "$STAGE/runtime/python"
-rm -rf "$STAGE/runtime/pythons"
+# 1. Relocatable CPython for the bundle. uv resolves a valid patch release of the
+#    series (no hardcoded download URL to go stale). Don't assume WHERE uv puts
+#    it: in CI, astral-sh/setup-uv sets UV_PYTHON_INSTALL_DIR in the job env, and
+#    newer uv honors that over both an exported value and --install-dir. So
+#    install it, then ask uv for the managed interpreter's path and copy that
+#    relocatable root into the bundle as runtime/python (stable, version-agnostic).
+uv python install --no-bin "$PY_SERIES"
+py_root="$(dirname "$(dirname "$(uv python find --managed-python "$PY_SERIES")")")"
+mkdir -p "$STAGE/runtime"
+cp -a "$py_root" "$STAGE/runtime/python"
 PY="$STAGE/runtime/python/bin/python3"
 
 # 2. Dependencies into a relocatable site dir (the launcher adds it to
