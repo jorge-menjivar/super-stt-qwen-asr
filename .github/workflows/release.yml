@@ -1,0 +1,62 @@
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    name: Assemble ${{ matrix.accel }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        accel: [cpu, cuda13]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      # Pure relocatable-wheel assembly — no compiler, no CUDA toolkit, no GPU.
+      # One CUDA bundle (cuda13) serves every GPU family: the bundled PyTorch
+      # wheel is multi-architecture, so backend.toml omits cuda_sm.
+      - name: Assemble bundle
+        run: ./scripts/build_bundle.sh ${{ matrix.accel }} "$RUNNER_TEMP/out"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: qwen3-asr-${{ matrix.accel }}
+          path: ${{ runner.temp }}/out/*.tar.gz
+
+  create-release:
+    name: Create Release
+    needs: assemble
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      # backend.toml must ship as a release asset named exactly `backend.toml`:
+      # the super-stt indexer hashes these bytes into the registry's `manifest`
+      # pin, and the daemon verifies the installed manifest against that hash
+      # (reviewed == pinned == installed). Without it the indexer falls back to
+      # un-pinned repo-source indexing. Checkout brings the tag's backend.toml
+      # into scope — the bundle tarballs don't carry it.
+      - uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            backend.toml
+            artifacts/**/*.tar.gz
+          generate_release_notes: true
