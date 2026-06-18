@@ -20,9 +20,15 @@
     accel = "cpu"
 
 # One CUDA build serves every GPU family: the bundled PyTorch wheel is
-# multi-architecture, so cuda_sm is omitted (wildcard).
+# multi-architecture, so cuda_sm is omitted (wildcard). The bundle exceeds
+# GitHub's 2 GiB release-asset limit, so it ships as ordered parts whose
+# in-order concatenation is the .tar.gz (release.yml splits it; the daemon
+# downloads, verifies, and reassembles them).
 [[assets.subprocess]]
-    file = "qwen3-asr-x86_64-unknown-linux-gnu-cuda13.tar.gz"
+    parts = [
+        "qwen3-asr-x86_64-unknown-linux-gnu-cuda13.tar.gz.part00",
+        "qwen3-asr-x86_64-unknown-linux-gnu-cuda13.tar.gz.part01",
+    ]
     target = "x86_64-unknown-linux-gnu"
     accel = "cuda"
     cuda_major = 13

@@ -29,10 +29,27 @@ jobs:
       - name: Assemble bundle
         run: ./scripts/build_bundle.sh ${{ matrix.accel }} "$RUNNER_TEMP/out"
 
+      # GitHub rejects release assets >= 2 GiB. Split an oversized bundle into
+      # ordered <2 GiB parts; their in-order concatenation is the original
+      # .tar.gz (backend.toml lists the parts; the daemon reassembles them).
+      # Smaller bundles (cpu) ship as a single file unchanged.
+      - name: Split bundles over the 2 GiB release-asset limit
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/out"
+          for f in *.tar.gz; do
+            sz=$(stat -c%s "$f")
+            if [ "$sz" -ge 2147483648 ]; then
+              split -b 2000M -d -a 2 "$f" "$f.part"
+              rm -f "$f"
+              echo "split $f ($sz bytes) -> $(ls "$f".part* | tr '\n' ' ')"
+            fi
+          done
+
       - uses: actions/upload-artifact@v7
         with:
           name: qwen3-asr-${{ matrix.accel }}
-          path: ${{ runner.temp }}/out/*.tar.gz
+          path: ${{ runner.temp }}/out/*.tar.gz*
 
   create-release:
     name: Create Release
@@ -58,5 +75,5 @@ jobs:
         with:
           files: |
             backend.toml
-            artifacts/**/*.tar.gz
+            artifacts/**/*.tar.gz*
           generate_release_notes: true
