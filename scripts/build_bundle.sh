@@ -43,10 +43,14 @@ trap 'rm -rf "$STAGE"' EXIT
 #    newer uv honors that over both an exported value and --install-dir. So
 #    install it, then ask uv for the managed interpreter's path and copy that
 #    relocatable root into the bundle as runtime/python (stable, version-agnostic).
+#    Copy with `cp -aL` (dereference): in CI the managed root is itself a symlink
+#    into uv's cache, so a plain `cp -a` ships a dangling absolute runtime/python
+#    symlink — a bundle with NO interpreter — and would also leave CPython's
+#    internal bin/lib symlinks, which the daemon's installer rejects.
 uv python install --no-bin "$PY_SERIES"
 py_root="$(dirname "$(dirname "$(uv python find --managed-python "$PY_SERIES")")")"
 mkdir -p "$STAGE/runtime"
-cp -a "$py_root" "$STAGE/runtime/python"
+cp -aL "$py_root" "$STAGE/runtime/python"
 PY="$STAGE/runtime/python/bin/python3"
 
 # 2. Dependencies into a relocatable site dir (the launcher adds it to
@@ -71,7 +75,22 @@ rm -rf "$STAGE/runtime/python/lib/python"*/idlelib \
        "$STAGE/runtime/python/lib/python"*/tkinter \
        "$STAGE/runtime/python/lib/python"*/ensurepip 2>/dev/null || true
 
-# 5. Tarball; print the size (mind the GitHub release per-asset limit for cuda).
+# 5. Guard against shipping a broken or uninstallable bundle: the interpreter
+#    must be a real, runnable file (a symlinked managed root previously shipped a
+#    dangling runtime/python with no interpreter), and the tree must be
+#    symlink-free (the daemon's installer rejects any tarball symlink).
+"$STAGE/runtime/python/bin/python3" --version >/dev/null 2>&1 || {
+    echo "FATAL: bundled runtime/python/bin/python3 is missing or does not run" >&2
+    exit 1
+}
+syms="$(find "$STAGE" -type l)"
+if [ -n "$syms" ]; then
+    echo "FATAL: bundle contains symlinks (the daemon installer rejects them):" >&2
+    printf '%s\n' "$syms" >&2
+    exit 1
+fi
+
+# 6. Tarball; print the size (mind the GitHub release per-asset limit for cuda).
 mkdir -p "$OUT"
 TARBALL="$OUT/qwen3-asr-${TARGET}-${ACCEL}.tar.gz"
 tar -C "$STAGE" -czf "$TARBALL" bin runtime app
