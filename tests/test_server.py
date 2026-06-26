@@ -31,6 +31,7 @@ class FakeEngine:
         self.infer_delay = infer_delay
         self.infer_fail = infer_fail
         self.loaded = None
+        self.last_language = None
 
     def load(self, name, device):
         if self.load_delay:
@@ -43,6 +44,7 @@ class FakeEngine:
         return "cuda" if device == "cuda" else "cpu"
 
     def transcribe(self, audio, sample_rate, language):
+        self.last_language = language
         if self.infer_delay:
             time.sleep(self.infer_delay)
         if self.infer_fail:
@@ -178,6 +180,18 @@ def test_transcribe_unsupported_language():
     r = c.post("/v1/transcribe", json={"audio_data": [0.1], "language": "xx"})
     assert r.status_code == 400
     assert r.json()["message"] == "unsupported_language"
+
+
+def test_transcribe_auto_maps_to_none():
+    # The reserved `auto` is not a supported code, but must be accepted and
+    # reach the model as None (auto-detect), not rejected as unsupported.
+    eng = FakeEngine(text="hola")
+    c = make_client(eng)
+    load_ok(c)
+    r = c.post("/v1/transcribe", json={"audio_data": [0.1], "language": "auto"})
+    assert r.status_code == 200, r.text
+    assert r.json()["transcription"] == "hola"
+    assert eng.last_language is None
 
 
 def test_transcribe_inference_failed():

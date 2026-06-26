@@ -128,6 +128,10 @@ def create_app(engine: Engine | None = None) -> Starlette:
             )
         sample_rate = data.get("sample_rate", 16000)
         language = data.get("language")
+        # The reserved `auto` requests detection; Qwen3-ASR auto-detects when
+        # given no language, so map it to None instead of rejecting it.
+        if language == "auto":
+            language = None
         if language is not None and language not in SUPPORTED_LANGUAGES:
             return JSONResponse(
                 {"status": "error", "message": "unsupported_language"},
