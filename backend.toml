@@ -10,6 +10,7 @@
     entrypoint = "bin/qwen3-asr"
     contract = "v1"
     license = "GPL-3.0-only"
+    description = "Local Qwen3-ASR speech-to-text."
 
 [network]
     allowed_hosts = []
