@@ -6,35 +6,92 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  check:
-    name: Check
+  test:
+    name: Test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - beta
+          - nightly
+
     steps:
       - uses: actions/checkout@v6
-
-      - uses: astral-sh/setup-uv@v8.2.0
-        with:
-          enable-cache: true
 
       - uses: taiki-e/install-action@v2
         with:
           tool: just
 
-      - name: Sync dev environment
-        run: just sync
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
 
-      - name: Lint
-        run: just lint
+      # Burn comes from a git dependency, so ~/.cargo/git carries most of the
+      # first build's cost.
+      - name: Cache dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Format check
+      # `test-tokenizer` fetches the 4.5 MB of tokenizer files the daemon
+      # normally supplies, so the reference tokenization fixture actually runs.
+      # Plain `just test` would pass while skipping it, which is the kind of
+      # green that means nothing.
+      - name: Run tests
+        run: just test-tokenizer --verbose
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
         run: just fmt-check
 
-      - name: Type check
-        run: just typecheck
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Tests
-        run: just test
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+
+      # Gates the build: `just check` runs clippy with `-D warnings`, so any
+      # lint fails CI.
+      - name: Run clippy
+        run: just check
 
   coverage:
     name: Coverage
@@ -42,24 +99,35 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v8.2.0
-        with:
-          enable-cache: true
-
       - uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just,cargo-llvm-cov
 
-      # CPU-only: covers the protocol/handler tests. The model load + ML decode
-      # path is GPU/weights-gated (lazy torch import in inference.py), so it is
-      # intentionally not counted.
-      - name: Coverage (XML artifact)
-        run: just coverage-xml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-llvmcov-${{ hashFiles('**/Cargo.lock') }}
+
+      # The tokenizer is fetched first for the same reason as the test job:
+      # without it that path is never executed and the number would flatter
+      # itself.
+      - name: Coverage (lcov + summary)
+        run: |
+          just fetch-tokenizer
+          just coverage-lcov
 
       - uses: actions/upload-artifact@v7
         with:
-          name: coverage-xml
-          path: coverage.xml
+          name: coverage-lcov
+          path: lcov.info
 
   # Publish the browsable HTML coverage report to GitHub Pages (main only).
   # One-time setup: repo Settings → Pages → Source = "GitHub Actions".
@@ -82,26 +150,36 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v8.2.0
-        with:
-          enable-cache: true
-
       - uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just,cargo-llvm-cov
 
-      # Renders the static report to htmlcov/ and writes coverage.json totals
-      # (same CPU-only scope as the XML job).
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-llvmcov-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Generate HTML coverage report
-        run: just coverage
+        run: |
+          just fetch-tokenizer
+          just coverage --html
 
       # Drop a shields.io "endpoint" JSON beside the HTML so the README badge
-      # reads the latest line-% straight from Pages — no Gist or PAT. pytest-cov
-      # already emitted coverage.json (totals.percent_covered).
+      # reads the latest line-% straight from Pages — no Gist or PAT. `report`
+      # reuses the profiles just collected (no rebuild). jq ships on the runner.
       - name: Write coverage badge JSON
         run: |
           set -euo pipefail
-          pct=$(python3 -c 'import json;print(json.load(open("coverage.json"))["totals"]["percent_covered"])')
+          pct=$(cargo llvm-cov report --json --summary-only --ignore-filename-regex 'tests/' \
+            | jq -r '.data[0].totals.lines.percent')
           if   awk "BEGIN{exit !($pct>=90)}"; then color=brightgreen
           elif awk "BEGIN{exit !($pct>=75)}"; then color=green
           elif awk "BEGIN{exit !($pct>=60)}"; then color=yellow
@@ -109,14 +187,14 @@ jobs:
           else color=red
           fi
           printf '{"schemaVersion":1,"label":"coverage","message":"%.1f%%","color":"%s"}\n' \
-            "$pct" "$color" > htmlcov/coverage.json
-          cat htmlcov/coverage.json
+            "$pct" "$color" > target/llvm-cov/html/coverage.json
+          cat target/llvm-cov/html/coverage.json
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: htmlcov
+          path: target/llvm-cov/html
 
       - name: Deploy to GitHub Pages
         id: deployment

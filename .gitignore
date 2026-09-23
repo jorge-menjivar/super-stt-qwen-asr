@@ -1,13 +1,23 @@
-.venv/
-__pycache__/
-.pytest_cache/
-.ruff_cache/
-.cache/
-target/
-*.pyc
+/target
 
-# Coverage artifacts (generated everywhere, committed nowhere).
-htmlcov/
-.coverage
-coverage.xml
-coverage.json
+# Build artifact staged by `just stage` under the entrypoint name `backend.toml`
+# declares. A local, installable copy of the binary — never committed; the
+# release workflow builds its own from source.
+/super-stt-backend-qwen-asr
+
+# Coverage artifacts (cargo-llvm-cov). `just coverage-lcov` writes lcov.info to
+# the repo root; the HTML report lives under target/. Profiles can land in CWD.
+/lcov.info
+*.profraw
+*.profdata
+
+# The parity script's bytecode.
+__pycache__/
+
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+
+# What the Python backend's coverage runs left behind, before the port.
+/.coverage
+/coverage.json
+/htmlcov/
