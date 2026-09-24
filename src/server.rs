@@ -174,14 +174,15 @@ async fn load(State(s): State<Arc<AppState>>, body: Option<Json<LoadRequest>>) -
 
     let state = Arc::clone(&s);
     let queued = s.model.submit(move |slot| {
-        // The previous model's memory goes first: two resident at once is
-        // what a GPU sized for one of them cannot hold.
-        *slot = None;
         let progress = |p: f32| state.set_progress(p);
         // A panic here — an allocation the device refused while the weights
-        // were mapped, say — would otherwise be caught by the model thread
-        // and leave the status saying `loading` for good.
+        // were mapped, or a lost device while the old model's memory was
+        // freed, say — would otherwise be caught by the model thread and
+        // leave the status saying `loading` for good.
         let loaded = model::catching(|| {
+            // The previous model's memory goes first: two resident at once
+            // is what a GPU sized for one of them cannot hold.
+            *slot = None;
             QwenAsr::load(&state.backend_dir, &name, device.as_deref(), &progress)
         })
         .unwrap_or_else(|panic| Err(LoadError::Failed(anyhow::anyhow!("panicked: {panic}"))));
