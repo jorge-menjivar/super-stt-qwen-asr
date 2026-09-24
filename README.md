@@ -4,8 +4,8 @@
 
 Qwen's [Qwen3-ASR](https://huggingface.co/Qwen) speech recognition models as a
 subprocess backend for [Super STT](https://github.com/jorge-menjivar/super-stt).
-Thirty languages, detected or named, on the CPU or on any GPU that CUDA, ROCm
-or Vulkan can drive.
+Thirty languages, detected or named, on Linux and macOS, on the CPU or on any
+GPU that CUDA, ROCm, Vulkan or Metal can drive.
 
 ## What it is
 
@@ -20,9 +20,11 @@ It replaces a Python backend that ran the same models through PyTorch and the
 
 - **One small binary per accelerator** instead of a multi-gigabyte bundle — the
   CUDA one used to ship in two parts to get under GitHub's 2 GiB asset limit.
-- **ROCm and Vulkan builds**, which a PyTorch wheel could not provide in one
-  bundle. Burn compiles every kernel at runtime through CubeCL, so one build per
-  accelerator covers every GPU generation its driver can compile for.
+- **ROCm, Vulkan, ARM and macOS builds**, which a PyTorch wheel could not
+  provide in one bundle: Vulkan on x86_64 and ARM Linux, and Metal and the CPU
+  on Apple Silicon and Intel Macs. Burn compiles every kernel at runtime
+  through CubeCL, so one build per accelerator covers every GPU generation its
+  driver can compile for.
 - **Streamed previews.** A streamed transcription sends `preview` frames as the
   text is decoded; the Python backend sent nothing until `done`.
 - **`POST /v1/cancel` stops a transcription**, within a token. The Python
@@ -157,6 +159,11 @@ that computes in neither half-width type gets f32. The shipped kernel bundle
 covers CUDA only, so a Vulkan build's first load compiles and tunes for about
 two minutes.
 
+Metal computes in f16 too: every Metal GPU does so natively, and f16 is the
+half-width type measured on this model. The Metal and macOS builds are built
+and linted in CI, and the CPU one tested there, but no Metal run has been
+measured yet.
+
 A clip of a length not seen before costs the same as one that was — 0.12 to
 0.31 s on a fresh process for clips of 5 to 18 seconds — because of the
 bucketing above.
@@ -245,6 +252,7 @@ just build-release          # the pure-Rust CPU backend
 just build-cuda             # needs the CUDA headers — no GPU, no compute capability
 just build-rocm             # needs the ROCm headers
 just build-vulkan           # needs nothing; the loader is found at runtime
+just build-metal            # on macOS, with Xcode's command line tools
 ```
 
 Each build carries exactly one accelerator, which is why the recipes pass

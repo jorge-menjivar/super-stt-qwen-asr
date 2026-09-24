@@ -14,7 +14,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.target }} ${{ matrix.suffix }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +34,7 @@ jobs:
               suffix: cpu,
               features: flex,
               image: "",
+              runner: ubuntu-latest,
             }
 
           # CUDA. Built inside the nvidia/cuda devel image (carries nvcc and
@@ -44,12 +45,14 @@ jobs:
               suffix: cuda12,
               features: cuda,
               image: "nvidia/cuda:12.9.1-cudnn-devel-ubuntu22.04",
+              runner: ubuntu-latest,
             }
           - {
               target: x86_64-unknown-linux-gnu,
               suffix: cuda13,
               features: cuda,
               image: "nvidia/cuda:13.0.3-cudnn-devel-ubuntu22.04",
+              runner: ubuntu-latest,
             }
 
           # ROCm. The image has to carry the ROCm version `cubecl-hip-sys`
@@ -59,6 +62,7 @@ jobs:
               suffix: rocm,
               features: rocm,
               image: "rocm/dev-ubuntu-24.04:7.1.1",
+              runner: ubuntu-latest,
             }
 
           # Vulkan: no SDK needed to build, the loader is found at runtime.
@@ -67,15 +71,58 @@ jobs:
               suffix: vulkan,
               features: vulkan,
               image: "",
+              runner: ubuntu-latest,
             }
 
-          # CPU (aarch64) — cross-compiled. No CUDA or ROCm on ARM here, and
-          # Vulkan is left out until there is a runner to test it on.
+          # aarch64 Linux, cross-compiled: CPU, and Vulkan for the ARM boards
+          # and laptops whose GPU has a Vulkan driver (Mesa's Panfrost, Turnip
+          # and Asahi, among others). No CUDA or ROCm on ARM here.
           - {
               target: aarch64-unknown-linux-gnu,
               suffix: cpu,
               features: flex,
               image: "",
+              runner: ubuntu-latest,
+            }
+          - {
+              target: aarch64-unknown-linux-gnu,
+              suffix: vulkan,
+              features: vulkan,
+              image: "",
+              runner: ubuntu-latest,
+            }
+
+          # macOS, built natively on an Apple Silicon runner with plain cargo:
+          # cross has no Apple images, and Xcode's SDK builds for both
+          # architectures. Metal is the GPU path on every Mac, Apple Silicon
+          # or an Intel one's AMD or Intel GPU; the CPU builds cover the rest.
+          - {
+              target: aarch64-apple-darwin,
+              suffix: metal,
+              features: metal,
+              image: "",
+              runner: macos-latest,
+            }
+          - {
+              target: aarch64-apple-darwin,
+              suffix: cpu,
+              features: flex,
+              image: "",
+              runner: macos-latest,
+            }
+          - {
+              target: x86_64-apple-darwin,
+              suffix: metal,
+              features: metal,
+              image: "",
+              runner: macos-latest,
+            }
+          - {
+              target: x86_64-apple-darwin,
+              suffix: cpu,
+              features: flex,
+              image: "",
+              runner: macos-latest,
             }
 
     steps:
@@ -96,20 +143,27 @@ jobs:
           key: ${{ matrix.target }}-${{ matrix.suffix }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install cross
+        if: runner.os == 'Linux'
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       # The CUDA and ROCm builds run inside their vendor's devel image, which
       # carries the toolkit headers those backends bind against, selected
-      # per-target via cross's image override. Everything else uses cross's
-      # default images. No GPU is needed at build time and no compute
+      # per-target via cross's image override. The other Linux builds use
+      # cross's default images, and the macOS ones plain cargo against the
+      # runner's Xcode SDK. No GPU is needed at build time and no compute
       # capability is chosen: CubeCL compiles the kernels on the host that runs
       # them.
       - name: Build
         run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            build=cargo
+          else
+            build=cross
+          fi
           if [ -n "${{ matrix.image }}" ]; then
             export CROSS_TARGET_X86_64_UNKNOWN_LINUX_GNU_IMAGE="${{ matrix.image }}"
           fi
-          cross build --release --locked --target ${{ matrix.target }} \
+          "$build" build --release --locked --target ${{ matrix.target }} \
             --no-default-features --features "${{ matrix.features }}" \
             --bin super-stt-backend-qwen-asr
 

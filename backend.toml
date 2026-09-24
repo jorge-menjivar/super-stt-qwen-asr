@@ -28,9 +28,9 @@
 #
 # One build per (target, accelerator). There is no compute-capability axis:
 # Burn compiles every kernel at runtime through CubeCL — NVRTC on CUDA, hiprtc
-# on ROCm, SPIR-V on Vulkan — so one CUDA build serves every NVIDIA generation
-# the installed driver can compile for. What is left is the CUDA major version,
-# which decides the API the binary was built against.
+# on ROCm, SPIR-V on Vulkan, MSL on Metal — so one CUDA build serves every
+# NVIDIA generation the installed driver can compile for. What is left is the
+# CUDA major version, which decides the API the binary was built against.
 
 [[assets.subprocess]]
     file = "qwen3-asr-x86_64-unknown-linux-gnu-cpu.tar.gz"
@@ -85,6 +85,35 @@
 [[assets.subprocess]]
     file = "qwen3-asr-aarch64-unknown-linux-gnu-cpu.tar.gz"
     target = "aarch64-unknown-linux-gnu"
+    accel = "cpu"
+
+[[assets.subprocess]]
+    file = "qwen3-asr-aarch64-unknown-linux-gnu-vulkan.tar.gz"
+    target = "aarch64-unknown-linux-gnu"
+    accel = "vulkan"
+    vulkan_api = "1.2"
+
+# macOS. Metal is the GPU path on every Mac, Apple Silicon or an Intel one's
+# AMD or Intel GPU, with the kernels compiled at runtime to the Metal Shading
+# Language.
+[[assets.subprocess]]
+    file = "qwen3-asr-aarch64-apple-darwin-metal.tar.gz"
+    target = "aarch64-apple-darwin"
+    accel = "metal"
+
+[[assets.subprocess]]
+    file = "qwen3-asr-aarch64-apple-darwin-cpu.tar.gz"
+    target = "aarch64-apple-darwin"
+    accel = "cpu"
+
+[[assets.subprocess]]
+    file = "qwen3-asr-x86_64-apple-darwin-metal.tar.gz"
+    target = "x86_64-apple-darwin"
+    accel = "metal"
+
+[[assets.subprocess]]
+    file = "qwen3-asr-x86_64-apple-darwin-cpu.tar.gz"
+    target = "x86_64-apple-darwin"
     accel = "cpu"
 
 # `provider` is a compatibility field: this backend does not read it, and it

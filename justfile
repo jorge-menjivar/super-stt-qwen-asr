@@ -42,6 +42,11 @@ build-rocm *args:
 build-vulkan *args:
     cargo build --release --locked --no-default-features --features vulkan {{ args }}
 
+# Build with Metal, on macOS. Needs Xcode's command line tools, for the SDK
+# the bundled SQLite compiles against; the kernels are compiled at runtime.
+build-metal *args:
+    cargo build --release --locked --no-default-features --features metal {{ args }}
+
 # Cargo already names the artifact as `backend.toml`'s entrypoint, and the
 # release workflow tarballs it under the same name, so a local install and a
 # published one stage the same bytes.

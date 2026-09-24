@@ -159,10 +159,14 @@ const ON_GPU: bool = cfg!(any(
 /// and is the closer of the two to f32: for the 0.6B model, 2.3e-2 worst
 /// relative error against the reference on Vulkan and 3.8e-2 on CUDA, where
 /// bf16 is 6.5e-2, with the same transcript. It is also 4.6 to 6.2 times as
-/// fast as f32 on an RTX 3090's Vulkan driver. A device that computes in
-/// neither type gets f32.
+/// fast as f32 on an RTX 3090's Vulkan driver.
+///
+/// Metal gets f16 too. Every Metal GPU computes in it natively, where bf16
+/// arrived with Apple's M-series GPUs and a recent Metal, and CubeCL's bf16
+/// has only ever run here on CUDA. A device that computes in neither type gets
+/// f32.
 fn compute_dtype(device: &Device) -> DType {
-    let half = if BUILT_FOR == "vulkan" {
+    let half = if matches!(BUILT_FOR, "vulkan" | "metal") {
         DType::F16
     } else {
         DType::BF16
