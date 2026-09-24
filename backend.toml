@@ -3,6 +3,7 @@
 # Qwen3-ASR (local, GPU) subprocess backend. See docs/protocol/backend/.
 
 [backend]
+    id = "app.super-stt.qwen-transformers"
     source = "github.com/jorge-menjivar/super-stt-qwen-asr"
     name = "Qwen3-ASR"
     version = "0.1.0"
