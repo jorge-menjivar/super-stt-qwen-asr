@@ -11,27 +11,40 @@ CUDA GPU — to turn speech into text, through PyTorch and Hugging Face
 > [!TIP]
 > **You probably want [super-stt-qwen](https://github.com/super-libre/super-stt-qwen)
 > instead.** It runs the same models, ported to Rust on
-> [Burn](https://github.com/tracel-ai/burn). It is listed in Super STT as a
-> separate backend, also named Qwen3-ASR, whose description says it runs on
-> Burn. Against this one it has:
+> [Burn](https://github.com/tracel-ai/burn), and is listed in Super STT as a
+> separate backend, also named Qwen, whose description says it runs on Burn.
+> Against this one:
 >
-> - **3 to 5 times faster GPU transcription.** On an RTX 3090 an 11-second clip
->   takes 0.14 s instead of 0.66 s on the 0.6B model, and a two-minute clip
->   1.3 s instead of 4.8 s.
-> - **More hardware.** Builds for CUDA, ROCm, Vulkan, Metal and the CPU, on x86_64
->   and ARM Linux and on macOS, where this one is CUDA or CPU on x86_64 Linux.
+> - **Faster on a GPU.** On an RTX 3090, in bf16, the median transcription of
+>   an 11-second clip took 0.14 s there against 0.66 s here with the 0.6B
+>   model, and 0.24 s against 0.62 s with the 1.7B; a two-minute clip took
+>   1.3 s against 4.8 s, and 2.0 s against 5.2 s. Most of the difference is
+>   per-token overhead: here each decoding step is driven from Python, there it
+>   is replayed as one captured GPU graph. On clips over eight seconds the
+>   encoder also does less work there, attending within eight-second windows
+>   as the model's own vLLM backend does, where `transformers`' default
+>   attention covers the whole clip.
+> - **More hardware.** Builds for CUDA, ROCm, Vulkan, Metal and the CPU, on
+>   x86_64 and ARM Linux and on macOS. This one ships CUDA and CPU builds for
+>   x86_64 Linux.
 > - **One small binary** instead of a multi-gigabyte bundle with a Python
 >   interpreter and PyTorch.
-> - **Streamed previews** while a clip is decoded, a cancel that stops a
->   transcription, and languages chosen by code that reach the model.
+> - **More of the backend contract.** Streamed previews while a clip is
+>   decoded (this one sends the text only at the end), a cancel that stops a
+>   transcription (here it is acknowledged but the transcription runs on), and
+>   a language chosen by the user (here the daemon's code, `en`, reaches
+>   `qwen-asr` as `En`, which it rejects, so the request fails).
+>
+> What it costs: its first load of each model compiles and tunes GPU kernels,
+> about six minutes on CUDA and two on Vulkan on that RTX 3090, where a load
+> here takes seconds; later loads take four to nine seconds. The 1.7B model
+> holds 7.6 GiB of GPU memory there against at most 5.8 GiB here. And on the
+> CPU it is no faster: 4.9 s for the 11-second clip, against 4.2 to 5.1 s for
+> this backend's bf16 build.
 >
 > This repository stays as the reference for running a `transformers` model
 > under Super STT. Both backends can be installed side by side; nothing moves
 > from one to the other.
-
-Super STT is an on-device speech-to-text engine. It doesn't ship any models of
-its own — it loads **backends** like this one at runtime. This repo packages the
-Qwen3-ASR family (0.6B and 1.7B) as one of those backends.
 
 ## Using it
 
