@@ -3,14 +3,15 @@
 # Qwen3-ASR (local, GPU) subprocess backend. See docs/protocol/backend/.
 
 [backend]
+    id = "app.super-stt.qwen-transformers"
     source = "github.com/jorge-menjivar/super-stt-qwen-asr"
     name = "Qwen3-ASR"
     version = "0.1.0"
     kind = "subprocess"
     entrypoint = "bin/qwen3-asr"
-    contract = "v1"
+    contract = "v3"
     license = "GPL-3.0-only"
-    description = "Local Qwen3-ASR speech-to-text."
+    description = "Local Qwen3-ASR speech-to-text on PyTorch and transformers: CUDA or CPU."
 
 [network]
     allowed_hosts = []
