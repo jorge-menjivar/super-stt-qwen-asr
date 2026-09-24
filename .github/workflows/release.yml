@@ -159,10 +159,13 @@ jobs:
             build=cargo
           else
             build=cross
-            # Where the ROCm build's LLVM download lands: inside the
-            # container, where the target directory is mounted at /target.
-            # See Cross.toml.
-            export XDG_DATA_HOME=/target/xdg-data
+            # cubecl-hip's tracel-llvm-bundler downloads LLVM at build time
+            # into $HOME/.cache and $HOME/.local/share, and a cross container's
+            # HOME is `/`, which the build cannot write. Give the container a
+            # HOME in the mounted target directory; the host's stays as it is,
+            # since cross itself runs there. LLVM is linked statically, so
+            # nothing downloaded is needed at runtime.
+            export CROSS_CONTAINER_OPTS="-e HOME=/target/cross-home"
           fi
           if [ -n "${{ matrix.image }}" ]; then
             export CROSS_TARGET_X86_64_UNKNOWN_LINUX_GNU_IMAGE="${{ matrix.image }}"

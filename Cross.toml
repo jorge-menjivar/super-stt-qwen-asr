@@ -1,8 +1,0 @@
-# The ROCm build's `tracel-llvm-bundler` (via cubecl-hip) downloads LLVM at
-# build time into the platform data directory, which inside a cross container
-# is under a `HOME` of `/` that the build cannot write. The release workflow
-# points `XDG_DATA_HOME` at the mounted target directory instead, and this
-# lets it through to the container. LLVM is linked statically, so nothing it
-# downloads is needed at runtime.
-[build.env]
-passthrough = ["XDG_DATA_HOME"]
