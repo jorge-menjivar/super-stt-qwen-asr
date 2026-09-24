@@ -159,6 +159,10 @@ jobs:
             build=cargo
           else
             build=cross
+            # Where the ROCm build's LLVM download lands: inside the
+            # container, where the target directory is mounted at /target.
+            # See Cross.toml.
+            export XDG_DATA_HOME=/target/xdg-data
           fi
           if [ -n "${{ matrix.image }}" ]; then
             export CROSS_TARGET_X86_64_UNKNOWN_LINUX_GNU_IMAGE="${{ matrix.image }}"
