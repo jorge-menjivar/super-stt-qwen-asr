@@ -141,7 +141,7 @@ parity-env:
 # on whatever accelerator the extra args name; `dtype` is the port's, and the
 # reference computes in f32 on the CPU unless `ref_dtype` says bfloat16.
 #
-# Compare every layer with the reference. Usage: just parity [model] [f32|bf16] [float32|bfloat16] [args]
+# Compare every layer with the reference. Usage: just parity [model] [f32|bf16|f16] [float32|bfloat16] [args]
 parity model="qwen3-asr-0.6b" dtype="f32" ref_dtype="float32" *args: parity-env (fetch-model model)
     #!/usr/bin/env bash
     set -euo pipefail

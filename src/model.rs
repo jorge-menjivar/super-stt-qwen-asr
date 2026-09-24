@@ -146,6 +146,34 @@ const ON_GPU: bool = cfg!(any(
     feature = "wgpu"
 ));
 
+/// The type the model computes in on `device`.
+///
+/// A half-width type halves the weights and the bandwidth on a GPU. On the CPU
+/// it is slower than f32 rather than faster.
+///
+/// bf16 is what the reference ran in and what CUDA and ROCm get, where the
+/// device computes in it. Never on Vulkan, whatever the device reports: the
+/// SPIR-V extension for bf16 allows no arithmetic on it, yet CubeCL emits some,
+/// and NVIDIA's driver crashes compiling it. Vulkan gets f16 instead. It
+/// holds this model's activations, which peak near 1.1e4 in the 1.7B decoder,
+/// and is the closer of the two to f32: for the 0.6B model, 2.3e-2 worst
+/// relative error against the reference on Vulkan and 3.8e-2 on CUDA, where
+/// bf16 is 6.5e-2, with the same transcript. It is also 4.6 to 6.2 times as
+/// fast as f32 on an RTX 3090's Vulkan driver. A device that computes in
+/// neither type gets f32.
+fn compute_dtype(device: &Device) -> DType {
+    let half = if BUILT_FOR == "vulkan" {
+        DType::F16
+    } else {
+        DType::BF16
+    };
+    if ON_GPU && device.supports_dtype(half) {
+        half
+    } else {
+        DType::F32
+    }
+}
+
 /// The device this build runs on, and the name to report for it.
 ///
 /// The daemon sends the accelerator the *installed asset* targets, and it is
@@ -523,18 +551,7 @@ impl QwenAsr {
         })
         .map_err(LoadError::DeviceUnavailable)?;
 
-        // bf16 halves the weights and the bandwidth on a GPU, and is what the
-        // reference ran in. On the CPU it is slower than f32 rather than
-        // faster. And only where the device computes in it: Vulkan can store
-        // bf16 and convert it without doing arithmetic in it, and Burn warns
-        // that computing in such a type is backend-dependent garbage. f32 is
-        // the fallback rather than f16, which the encoder would need clamped
-        // and nothing here has measured.
-        let dtype = if ON_GPU && device.supports_dtype(DType::BF16) {
-            DType::BF16
-        } else {
-            DType::F32
-        };
+        let dtype = compute_dtype(&device);
         log::info!(
             "loading {model_name} on {device_name} ({dtype:?}) from {}",
             dir.display()

@@ -16,8 +16,8 @@
 //! `SUPER_STT_PARITY_DTYPE` picks the port's dtype, `f32` by default, and
 //! `SUPER_STT_PARITY_MODEL` the checkpoint, `qwen3-asr-0.6b` by default. In
 //! f32 against an f32 dump the two are the same arithmetic in a different
-//! order, and every layer is held to that; in bf16 the table is the measure of
-//! what the narrower type costs, and only the transcript is held.
+//! order, and every layer is held to that; in bf16 or f16 the table is the
+//! measure of what the narrower type costs, and only the transcript is held.
 //!
 //! The features are compared on their own first; the model is then fed the
 //! reference's, so the comparison starts from identical input. From there each
@@ -122,8 +122,9 @@ fn layers_match_the_reference() {
     let model_dir = model_dir().expect("SUPER_STT_BACKEND_DIR or SUPER_STT_PARITY_MODEL_DIR");
     let dtype = match std::env::var("SUPER_STT_PARITY_DTYPE").as_deref() {
         Ok("bf16") => DType::BF16,
+        Ok("f16") => DType::F16,
         Ok("f32") | Err(_) => DType::F32,
-        Ok(other) => panic!("SUPER_STT_PARITY_DTYPE takes f32 or bf16, not {other}"),
+        Ok(other) => panic!("SUPER_STT_PARITY_DTYPE takes f32, bf16 or f16, not {other}"),
     };
     let bytes = std::fs::read(&reference).expect("reading the reference dump");
     let st = SafeTensors::deserialize(&bytes).expect("parsing the reference dump");

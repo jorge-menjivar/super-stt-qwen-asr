@@ -4,4 +4,4 @@
 # would make prose about a project read like prose about a type.
 #
 # The list extends clippy's own defaults rather than replacing them.
-doc-valid-idents = ["CubeCL", "PyTorch", ".."]
+doc-valid-idents = ["CubeCL", "PyTorch", "ROCm", ".."]

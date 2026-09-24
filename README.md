@@ -118,13 +118,17 @@ step's logits are compared.
 | 1.7B, CPU f32 vs PyTorch f32              |   91 |       7.0e-6  |         30/30 |
 | 0.6B, CUDA f32 (TF32) vs PyTorch f32      |   85 |       3.6e-3  |         30/30 |
 | 0.6B, CUDA bf16 vs PyTorch f32            |   85 |       6.5e-2  |         30/30 |
+| 0.6B, Vulkan f16 vs PyTorch f32           |   85 |       2.3e-2  |         30/30 |
+| 1.7B, Vulkan f16 vs PyTorch f32           |   91 |       9.7e-3  |         30/30 |
 
 In f32 on the CPU the two are the same arithmetic in a different order. On a
 GPU the matmuls run on tensor cores at TF32, which puts every layer near 1e-3
 by itself. In bf16 the error is what the narrower type costs: at the decoder's
 final norm Burn's bf16 is 6.5e-2 from f32 where PyTorch's own bf16 is 1.5e-1.
+f16 keeps three more bits of mantissa than bf16 in a narrower range, which this
+model's activations fit: they peak near 1.1e4, and f16's largest value is 6.5e4.
 
-Run it with `just parity [model] [f32|bf16] [float32|bfloat16] [cargo args]`;
+Run it with `just parity [model] [f32|bf16|f16] [float32|bfloat16] [cargo args]`;
 it provisions the Python reference in `target/parity-venv` on first use.
 
 ## Requirements and performance
@@ -137,16 +141,21 @@ included, on an RTX 3090 and, for the CPU build, a Ryzen 9 5900X:
 | ------------ | ----- | ----------------------: | ------------: |
 | CUDA (bf16)  | 0.6B  |                   4.9 s |        0.21 s |
 | CUDA (bf16)  | 1.7B  |                   6.1 s |        0.25 s |
-| Vulkan (f32) | 0.6B  |                       — |        0.88 s |
+| Vulkan (f16) | 0.6B  |                   5.9 s |        0.19 s |
+| Vulkan (f16) | 1.7B  |                   9.9 s |        0.30 s |
 | CPU (f32)    | 0.6B  |                   8.1 s |         4.9 s |
 
 The CPU build has no kernel cache; its load is mapping the weights, transposing
 them to the row-major layout Burn's CPU backend multiplies fastest, and a short
 warm-up.
 
-Vulkan runs in f32 there: the RTX 3090's Vulkan driver does not report bf16
-arithmetic, and computing in a type a device only stores is garbage, so the
-backend asks the device before choosing bf16.
+Vulkan computes in f16, never bf16. The SPIR-V extension for bf16 allows no
+arithmetic on it, yet CubeCL emits some, and NVIDIA's driver crashes compiling
+it. f16 is what the RTX 3090 computes fastest there: 0.19 s for the clip
+against 0.88 s in f32, and 0.89 s against 5.6 s for a 66-second one. A device
+that computes in neither half-width type gets f32. The shipped kernel bundle
+covers CUDA only, so a Vulkan build's first load compiles and tunes for about
+two minutes.
 
 A clip of a length not seen before costs the same as one that was — 0.12 to
 0.31 s on a fresh process for clips of 5 to 18 seconds — because of the
