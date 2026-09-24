@@ -1,10 +1,33 @@
-# Super STT — Qwen3-ASR backend
+# Super STT — Qwen3-ASR backend (transformers)
 
 [![coverage](https://img.shields.io/endpoint?url=https://jorge-menjivar.github.io/super-stt-qwen-asr/coverage.json)](https://jorge-menjivar.github.io/super-stt-qwen-asr/)
 
 A speech-to-text backend for **[Super STT](https://github.com/jorge-menjivar/super-stt)**.
 It runs [Qwen3-ASR](https://huggingface.co/Qwen) models locally — on CPU or a
-CUDA GPU — to turn speech into text.
+CUDA GPU — to turn speech into text, through PyTorch and Hugging Face
+[transformers](https://github.com/huggingface/transformers) by way of Qwen's
+`qwen-asr` package.
+
+> [!TIP]
+> **You probably want [super-stt-qwen](https://github.com/super-libre/super-stt-qwen)
+> instead.** It runs the same models, ported to Rust on
+> [Burn](https://github.com/tracel-ai/burn). It is listed in Super STT as a
+> separate backend, also named Qwen3-ASR, whose description says it runs on
+> Burn. Against this one it has:
+>
+> - **3 to 5 times faster GPU transcription.** On an RTX 3090 an 11-second clip
+>   takes 0.14 s instead of 0.66 s on the 0.6B model, and a two-minute clip
+>   1.3 s instead of 4.8 s.
+> - **More hardware.** Builds for CUDA, ROCm, Vulkan, Metal and the CPU, on x86_64
+>   and ARM Linux and on macOS, where this one is CUDA or CPU on x86_64 Linux.
+> - **One small binary** instead of a multi-gigabyte bundle with a Python
+>   interpreter and PyTorch.
+> - **Streamed previews** while a clip is decoded, a cancel that stops a
+>   transcription, and languages chosen by code that reach the model.
+>
+> This repository stays as the reference for running a `transformers` model
+> under Super STT. Both backends can be installed side by side; nothing moves
+> from one to the other.
 
 Super STT is an on-device speech-to-text engine. It doesn't ship any models of
 its own — it loads **backends** like this one at runtime. This repo packages the
@@ -31,8 +54,9 @@ GPU; weights are pulled from Hugging Face on first load. Both are multilingual
 ## What's in here
 
 A small, self-contained Python program (Starlette over a Unix socket) that loads
-a Qwen3-ASR model and speaks the Super STT backend protocol (a tiny HTTP API over
-a Unix socket). It shares no code with the Super STT project.
+a Qwen3-ASR model through `transformers` and speaks the Super STT backend
+protocol (a tiny HTTP API over a Unix socket). It shares no code with the Super
+STT project.
 
 Releases ship as a **relocatable bundle** — a standalone CPython plus every
 dependency (PyTorch, qwen-asr, …) — so the host needs no Python installed.
