@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
+import sys
 import threading
 
 from starlette.applications import Starlette
@@ -15,6 +17,8 @@ from starlette.routing import Route
 
 from inference import MODELS, PROVIDER, DeviceUnavailable, Engine
 from lang import AUTO, to_model_name
+
+log = logging.getLogger(__name__)
 
 
 class State:
@@ -94,7 +98,8 @@ def create_app(engine: Engine | None = None) -> Starlette:
                     st.state = "error"
                     st.reason = "device_unavailable"
                     st.progress = None
-            except Exception:  # noqa: BLE001  (any load failure -> error state)
+            except Exception:  # any load failure -> error state
+                log.exception("loading %s failed", name)
                 with st.lock:
                     st.state = "error"
                     st.reason = "load_failed"
@@ -157,14 +162,16 @@ def create_app(engine: Engine | None = None) -> Starlette:
                 try:
                     text = await run()
                     yield _sse("done", {"transcription": text})
-                except Exception:  # noqa: BLE001
+                except Exception:
+                    log.exception("transcription failed")
                     yield _sse("error", {"message": "inference_failed"})
 
             return StreamingResponse(gen(), media_type="text/event-stream")
 
         try:
             text = await run()
-        except Exception:  # noqa: BLE001
+        except Exception:
+            log.exception("transcription failed")
             return JSONResponse(
                 {"status": "error", "message": "inference_failed"}, status_code=500
             )
@@ -198,6 +205,9 @@ def create_app(engine: Engine | None = None) -> Starlette:
 def main() -> None:
     import uvicorn  # noqa: PLC0415
 
+    # stderr reaches the journal of the backend's systemd unit. Without a
+    # handler, a failure that becomes an error reply would leave no trace there.
+    logging.basicConfig(format="%(levelname)s %(message)s", stream=sys.stderr)
     socket = os.environ["SUPER_STT_BACKEND_SOCKET"]
     uvicorn.run(create_app(), uds=socket, log_level="warning")
 
