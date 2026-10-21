@@ -141,12 +141,13 @@ def test_device_unavailable():
     assert s["reason"] == "device_unavailable"
 
 
-def test_load_failed():
+def test_load_failed(caplog):
     c = make_client(FakeEngine(fail="load"))
     c.post("/v1/load", json={"name": "qwen3-asr-0.6b", "provider": "local_qwen3_asr"})
     s = wait_settled(c)
     assert s["state"] == "error"
     assert s["reason"] == "load_failed"
+    assert "boom" in caplog.text
 
 
 def test_transcribe_not_ready():
@@ -177,9 +178,22 @@ def test_transcribe_invalid_audio():
 def test_transcribe_unsupported_language():
     c = make_client(FakeEngine())
     load_ok(c)
-    r = c.post("/v1/transcribe", json={"audio_data": [0.1], "language": "xx"})
-    assert r.status_code == 400
-    assert r.json()["message"] == "unsupported_language"
+    for language in ("xx", "French", 5):
+        r = c.post("/v1/transcribe", json={"audio_data": [0.1], "language": language})
+        assert r.status_code == 400, language
+        assert r.json()["message"] == "unsupported_language"
+
+
+def test_transcribe_code_reaches_model_as_name():
+    # qwen_asr refuses codes (`fr` -> "Unsupported language: Fr"), so the
+    # model must be handed the name instead.
+    eng = FakeEngine(text="bonjour")
+    c = make_client(eng)
+    load_ok(c)
+    for language in ("fr", "fr-FR"):
+        r = c.post("/v1/transcribe", json={"audio_data": [0.1], "language": language})
+        assert r.status_code == 200, r.text
+        assert eng.last_language == "French"
 
 
 def test_transcribe_auto_maps_to_none():
@@ -194,12 +208,14 @@ def test_transcribe_auto_maps_to_none():
     assert eng.last_language is None
 
 
-def test_transcribe_inference_failed():
+def test_transcribe_inference_failed(caplog):
     c = make_client(FakeEngine(infer_fail=True))
     load_ok(c)
     r = c.post("/v1/transcribe", json={"audio_data": [0.1, 0.2]})
     assert r.status_code == 500
     assert r.json()["message"] == "inference_failed"
+    # The reply carries no detail, so the cause has to reach the log.
+    assert "inference boom" in caplog.text
 
 
 def test_transcribe_streaming_emits_done():

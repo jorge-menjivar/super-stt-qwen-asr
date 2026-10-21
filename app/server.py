@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
+import sys
 import threading
 
 from starlette.applications import Starlette
@@ -13,13 +15,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
-from inference import (
-    MODELS,
-    PROVIDER,
-    SUPPORTED_LANGUAGES,
-    DeviceUnavailable,
-    Engine,
-)
+from inference import MODELS, PROVIDER, DeviceUnavailable, Engine
+from lang import AUTO, to_model_name
+
+log = logging.getLogger(__name__)
 
 
 class State:
@@ -99,7 +98,8 @@ def create_app(engine: Engine | None = None) -> Starlette:
                     st.state = "error"
                     st.reason = "device_unavailable"
                     st.progress = None
-            except Exception:  # noqa: BLE001  (any load failure -> error state)
+            except Exception:  # any load failure -> error state
+                log.exception("loading %s failed", name)
                 with st.lock:
                     st.state = "error"
                     st.reason = "load_failed"
@@ -128,15 +128,17 @@ def create_app(engine: Engine | None = None) -> Starlette:
             )
         sample_rate = data.get("sample_rate", 16000)
         language = data.get("language")
-        # The reserved `auto` requests detection; Qwen3-ASR auto-detects when
-        # given no language, so map it to None instead of rejecting it.
-        if language == "auto":
-            language = None
-        if language is not None and language not in SUPPORTED_LANGUAGES:
+        # qwen_asr takes a language by its English name, not its code, so
+        # resolve here: a tag the model does not transcribe is refused before
+        # any work rather than failing inside the model. `auto` (or no
+        # language) requests detection, which Qwen3-ASR does when given None.
+        name = to_model_name(language) if isinstance(language, str | None) else None
+        if name is None:
             return JSONResponse(
                 {"status": "error", "message": "unsupported_language"},
                 status_code=400,
             )
+        language = None if name == AUTO else name
         options = data.get("options") or {}
         stream = bool(options.get("stream_realtime"))
 
@@ -160,14 +162,16 @@ def create_app(engine: Engine | None = None) -> Starlette:
                 try:
                     text = await run()
                     yield _sse("done", {"transcription": text})
-                except Exception:  # noqa: BLE001
+                except Exception:
+                    log.exception("transcription failed")
                     yield _sse("error", {"message": "inference_failed"})
 
             return StreamingResponse(gen(), media_type="text/event-stream")
 
         try:
             text = await run()
-        except Exception:  # noqa: BLE001
+        except Exception:
+            log.exception("transcription failed")
             return JSONResponse(
                 {"status": "error", "message": "inference_failed"}, status_code=500
             )
@@ -201,6 +205,9 @@ def create_app(engine: Engine | None = None) -> Starlette:
 def main() -> None:
     import uvicorn  # noqa: PLC0415
 
+    # stderr reaches the journal of the backend's systemd unit. Without a
+    # handler, a failure that becomes an error reply would leave no trace there.
+    logging.basicConfig(format="%(levelname)s %(message)s", stream=sys.stderr)
     socket = os.environ["SUPER_STT_BACKEND_SOCKET"]
     uvicorn.run(create_app(), uds=socket, log_level="warning")
 
