@@ -6,7 +6,7 @@
     id = "app.super-stt.qwen-transformers"
     source = "github.com/jorge-menjivar/super-stt-qwen-asr"
     name = "Qwen3-ASR"
-    version = "0.1.0"
+    version = "0.1.1"
     kind = "subprocess"
     entrypoint = "bin/qwen3-asr"
     contract = "v3"
