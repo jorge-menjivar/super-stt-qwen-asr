@@ -13,13 +13,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
-from inference import (
-    MODELS,
-    PROVIDER,
-    SUPPORTED_LANGUAGES,
-    DeviceUnavailable,
-    Engine,
-)
+from inference import MODELS, PROVIDER, DeviceUnavailable, Engine
+from lang import AUTO, to_model_name
 
 
 class State:
@@ -128,15 +123,17 @@ def create_app(engine: Engine | None = None) -> Starlette:
             )
         sample_rate = data.get("sample_rate", 16000)
         language = data.get("language")
-        # The reserved `auto` requests detection; Qwen3-ASR auto-detects when
-        # given no language, so map it to None instead of rejecting it.
-        if language == "auto":
-            language = None
-        if language is not None and language not in SUPPORTED_LANGUAGES:
+        # qwen_asr takes a language by its English name, not its code, so
+        # resolve here: a tag the model does not transcribe is refused before
+        # any work rather than failing inside the model. `auto` (or no
+        # language) requests detection, which Qwen3-ASR does when given None.
+        name = to_model_name(language) if isinstance(language, str | None) else None
+        if name is None:
             return JSONResponse(
                 {"status": "error", "message": "unsupported_language"},
                 status_code=400,
             )
+        language = None if name == AUTO else name
         options = data.get("options") or {}
         stream = bool(options.get("stream_realtime"))
 

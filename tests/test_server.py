@@ -177,9 +177,22 @@ def test_transcribe_invalid_audio():
 def test_transcribe_unsupported_language():
     c = make_client(FakeEngine())
     load_ok(c)
-    r = c.post("/v1/transcribe", json={"audio_data": [0.1], "language": "xx"})
-    assert r.status_code == 400
-    assert r.json()["message"] == "unsupported_language"
+    for language in ("xx", "French", 5):
+        r = c.post("/v1/transcribe", json={"audio_data": [0.1], "language": language})
+        assert r.status_code == 400, language
+        assert r.json()["message"] == "unsupported_language"
+
+
+def test_transcribe_code_reaches_model_as_name():
+    # qwen_asr refuses codes (`fr` -> "Unsupported language: Fr"), so the
+    # model must be handed the name instead.
+    eng = FakeEngine(text="bonjour")
+    c = make_client(eng)
+    load_ok(c)
+    for language in ("fr", "fr-FR"):
+        r = c.post("/v1/transcribe", json={"audio_data": [0.1], "language": language})
+        assert r.status_code == 200, r.text
+        assert eng.last_language == "French"
 
 
 def test_transcribe_auto_maps_to_none():

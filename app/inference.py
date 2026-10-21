@@ -18,42 +18,6 @@ MODELS: dict[str, str] = {
     "qwen3-asr-1.7b": "models/qwen3-asr-1.7b",
 }
 
-# The 30 languages the Qwen3-ASR family accepts (ISO codes from the model card).
-SUPPORTED_LANGUAGES: frozenset[str] = frozenset(
-    {
-        "zh",
-        "en",
-        "yue",
-        "ar",
-        "de",
-        "fr",
-        "es",
-        "pt",
-        "id",
-        "it",
-        "ko",
-        "ru",
-        "th",
-        "vi",
-        "ja",
-        "tr",
-        "hi",
-        "ms",
-        "nl",
-        "sv",
-        "da",
-        "fi",
-        "pl",
-        "cs",
-        "fil",
-        "fa",
-        "el",
-        "hu",
-        "mk",
-        "ro",
-    }
-)
-
 
 class DeviceUnavailable(Exception):
     """Requested device (e.g. cuda) could not be initialized."""
@@ -95,6 +59,8 @@ class Engine:
     def transcribe(
         self, audio: list[float], sample_rate: int, language: str | None
     ) -> TranscriptionResult:
+        """`language` is a model name from `lang.LANGUAGES` (`French`, not
+        `fr`), or None to let the model detect it."""
         if self._model is None:
             raise RuntimeError("transcribe called before a model was loaded")
         import numpy as np  # noqa: PLC0415
