@@ -45,7 +45,7 @@ def _sse(event: str, data: dict) -> str:
 
 
 def create_app(engine: Engine | None = None) -> Starlette:
-    backend_dir = os.environ.get("SUPER_STT_BACKEND_DIR", ".")
+    backend_dir = os.environ.get("SUPER_VOICE_BACKEND_DIR", ".")
     eng = engine if engine is not None else Engine(backend_dir)
     st = State()
     infer_lock = asyncio.Lock()
@@ -208,7 +208,7 @@ def main() -> None:
     # stderr reaches the journal of the backend's systemd unit. Without a
     # handler, a failure that becomes an error reply would leave no trace there.
     logging.basicConfig(format="%(levelname)s %(message)s", stream=sys.stderr)
-    socket = os.environ["SUPER_STT_BACKEND_SOCKET"]
+    socket = os.environ["SUPER_VOICE_BACKEND_SOCKET"]
     uvicorn.run(create_app(), uds=socket, log_level="warning")
 
 
